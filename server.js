@@ -10,8 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos (imágenes) desde chatbot-perfumes/images/
-app.use('/images', express.static(path.join(__dirname, '../chatbot-perfumes/images')));
+// Servir archivos estáticos (imágenes) desde server/images/
+app.use('/images', express.static(path.join(__dirname, 'images')));
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
 const SHOPIFY_STORE_URL = 'https://dzui0a-qg.myshopify.com';
@@ -102,7 +102,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     );
     if (productMatch) {
       const imageUrl = productMatch.image_url?.startsWith('/')
-        ? `https://hdcompany-whatsapp.onrender.com${productMatch.image_url}`
+        ? `https://server-kbd8.onrender.com${productMatch.image_url}`
         : productMatch.image_url || '/default-product.jpg';
       return res.json({
         message: `📷 Imagen de ${productMatch.nombre}:<br/><img src="${imageUrl}" alt="${productMatch.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
@@ -138,7 +138,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     const productList = topExpensive
       .map((p) => {
         const imageUrl = p.image_url?.startsWith('/')
-          ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+          ? `https://server-kbd8.onrender.com${p.image_url}`
           : p.image_url || '/default-product.jpg';
         return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
       })
@@ -158,7 +158,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     const productList = topCheap
       .map((p) => {
         const imageUrl = p.image_url?.startsWith('/')
-          ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+          ? `https://server-kbd8.onrender.com${p.image_url}`
           : p.image_url || '/default-product.jpg';
         return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
       })
@@ -189,7 +189,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
         .slice(0, 5)
         .map((p) => {
           const imageUrl = p.image_url?.startsWith('/')
-            ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+            ? `https://server-kbd8.onrender.com${p.image_url}`
             : p.image_url || '/default-product.jpg';
           return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
         })
