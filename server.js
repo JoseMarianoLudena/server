@@ -10,6 +10,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Servir archivos estáticos (imágenes) desde chatbot-perfumes/images/
+app.use('/images', express.static(path.join(__dirname, '../chatbot-perfumes/images')));
+
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY;
 const SHOPIFY_STORE_URL = 'https://dzui0a-qg.myshopify.com';
 const API_VERSION = '2023-04';
@@ -23,6 +26,14 @@ const openai = new OpenAI({
 const hdcompanyProducts = JSON.parse(fs.readFileSync(path.join(__dirname, 'products.json'), 'utf8'));
 const faqs = JSON.parse(fs.readFileSync(path.join(__dirname, 'faqs.json'), 'utf8'));
 const discounts = JSON.parse(fs.readFileSync(path.join(__dirname, 'discounts.json'), 'utf8'));
+
+// Función para normalizar texto
+const normalizeText = (text) =>
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 // Endpoint para productos de Shopify (para romani)
 app.get('/api/shopify/products', async (req, res) => {
@@ -52,34 +63,64 @@ app.get('/api/hdcompany/categories', (req, res) => {
   res.json(categories);
 });
 
+// Endpoint para FAQs
+app.get('/api/hdcompany/faqs', (req, res) => {
+  res.json(faqs);
+});
+
 // Endpoint para detectIntent con OpenAI
 app.post('/api/hdcompany/openai', async (req, res) => {
   const { input, userName } = req.body;
-  const lowerInput = input.toLowerCase();
+  const normalizedInput = normalizeText(input);
 
-  // Buscar en FAQs con expresiones regulares
+  // Verificar FAQs
   const faqMatch = faqs.find((faq) => {
-    if (faq.question.toLowerCase() === 'tienen tienda física') {
-      return /(d[oó]nde.*(est[aá]n|ubicad[o]?s?|localizad[o]?s?|local|direcci[oó]n))|ubicaci[oó]n|tienda|sucursal/i.test(lowerInput);
+    const normalizedQuestion = normalizeText(faq.question);
+    if (normalizedQuestion === 'tienen tienda fisica') {
+      return /d[oó]nde.*(est[aá]n|ubicad[o]?s?|localizad[o]?s?|local|direcci[oó]n)|ubicaci[oó]n|tienda|sucursal/i.test(normalizedInput);
+    } else if (normalizedQuestion === 'métodos de pago') {
+      return /(pagar|pagos?|tarjeta|paypal|yape|plin)/i.test(normalizedInput);
+    } else if (normalizedQuestion === 'envíos') {
+      return /(env[ií]os?|delivery|entrega)/i.test(normalizedInput);
+    } else if (normalizedQuestion === 'contacto') {
+      return /(contacto|tel[eé]fono|whatsapp)/i.test(normalizedInput);
     }
-    if (faq.question.toLowerCase() === 'métodos de pago') {
-      return /(pagar|pagos?|tarjeta|paypal|yape|plin)/i.test(lowerInput);
-    }
-    if (faq.question.toLowerCase() === 'envíos') {
-      return /(env[ií]os?|delivery|entrega)/i.test(lowerInput);
-    }
-    if (faq.question.toLowerCase() === 'contacto') {
-      return /(contacto|tel[eé]fono|whatsapp)/i.test(lowerInput);
-    }
-    return lowerInput.includes(faq.question.toLowerCase());
+    return normalizedInput.includes(normalizedQuestion);
   });
 
   if (faqMatch) {
-    return res.json({ message: `${faqMatch.answer} ¿En qué te puedo ayudar ahora, ${userName}? 😄`, intent: 'FAQ' });
+    return res.json({
+      message: `${faqMatch.answer}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
+      intent: 'FAQ',
+    });
+  }
+
+  // Verificar solicitud de imagen
+  if (/\b(imagen|foto|ver.*producto|c[oó]mo.*es|puedo.*ver)\b/i.test(normalizedInput)) {
+    const productMatch = hdcompanyProducts.find((p) =>
+      normalizedInput.includes(normalizeText(p.nombre))
+    );
+    if (productMatch) {
+      const imageUrl = productMatch.image_url?.startsWith('/')
+        ? `https://hdcompany-whatsapp.onrender.com${productMatch.image_url}`
+        : productMatch.image_url || '/default-product.jpg';
+      return res.json({
+        message: `📷 Imagen de ${productMatch.nombre}:<br/><img src="${imageUrl}" alt="${productMatch.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
+        intent: 'Imagen',
+      });
+    }
+  }
+
+  // Verificar despedida
+  if (/(gracias|adios|resuelto|listo|ok|solucionado|chao)/i.test(normalizedInput)) {
+    return res.json({
+      message: `¡Gracias por contactarnos, ${userName}! 😊 Escríbenos si necesitas más ayuda.`,
+      intent: 'Despedida',
+    });
   }
 
   // Pregunta sobre categorías
-  if (/(categor[ií]as?|tipo[s]? de productos?|qu[eé] tienes?)/i.test(lowerInput)) {
+  if (/(categor[ií]as?|tipo[s]? de productos?|qu[eé] tienes?)/i.test(normalizedInput)) {
     const categories = [...new Set(hdcompanyProducts.map((p) => p.categoria))];
     const categoryList = categories.join(', ');
     return res.json({
@@ -89,56 +130,72 @@ app.post('/api/hdcompany/openai', async (req, res) => {
   }
 
   // Pregunta sobre productos más caros
-  if (/(m[aá]s caro[s]?|costoso[s]?|precio[s]? alto[s]?)/i.test(lowerInput)) {
+  if (/(m[aá]s caro[s]?|costoso[s]?|precio[s]? alto[s]?)/i.test(normalizedInput)) {
     const sortedProducts = [...hdcompanyProducts].sort(
       (a, b) => parseFloat(b.precio.replace('PEN ', '')) - parseFloat(a.precio.replace('PEN ', ''))
     );
     const topExpensive = sortedProducts.slice(0, 3);
     const productList = topExpensive
-      .map((p) => `• ${p.nombre} - ${p.precio}`)
-      .join('\n');
+      .map((p) => {
+        const imageUrl = p.image_url?.startsWith('/')
+          ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+          : p.image_url || '/default-product.jpg';
+        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+      })
+      .join('<br/>');
     return res.json({
-      message: `Los productos más caros son:\n${productList}\n¿En qué te puedo ayudar ahora, ${userName}? 😄`,
+      message: `Los productos más caros son:<br/>${productList}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'ExpensiveProducts',
     });
   }
 
   // Pregunta sobre productos más baratos
-  if (/(m[aá]s barato[s]?|econ[oó]mico[s]?|menor precio)/i.test(lowerInput)) {
+  if (/(m[aá]s barato[s]?|econ[oó]mico[s]?|menor precio)/i.test(normalizedInput)) {
     const sortedProducts = [...hdcompanyProducts].sort(
       (a, b) => parseFloat(a.precio.replace('PEN ', '')) - parseFloat(b.precio.replace('PEN ', ''))
     );
     const topCheap = sortedProducts.slice(0, 3);
     const productList = topCheap
-      .map((p) => `• ${p.nombre} - ${p.precio}`)
-      .join('\n');
+      .map((p) => {
+        const imageUrl = p.image_url?.startsWith('/')
+          ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+          : p.image_url || '/default-product.jpg';
+        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+      })
+      .join('<br/>');
     return res.json({
-      message: `Los productos más baratos son:\n${productList}\n¿En qué te puedo ayudar ahora, ${userName}? 😄`,
+      message: `Los productos más baratos son:<br/>${productList}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'CheapProducts',
     });
   }
 
   // Pregunta sobre descuentos
-  if (/(descuento[s]?|oferta[s]?|promoci[oó]n)/i.test(lowerInput)) {
+  if (/(descuento[s]?|oferta[s]?|promoci[oó]n)/i.test(normalizedInput)) {
     const discountText = discounts.bulk_discounts
       .map((d) => `Compra ${d.quantity} o más y obtén ${d.discount * 100}% de descuento.`)
       .join(' ');
     return res.json({
-      message: `Nuestros descuentos: ${discountText} ¿En qué te puedo ayudar ahora, ${userName}? 😄`,
+      message: `Nuestros descuentos: ${discountText} ¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'Discount',
     });
   }
 
   // Pregunta sobre productos específicos por categoría
-  if (/(producto[s]?|art[ií]culo[s]?|cargador(es)?|mouse|laptop[s]?)/i.test(lowerInput)) {
-    const categoryMatch = hdcompanyProducts.find((p) => lowerInput.includes(p.categoria.toLowerCase()));
+  if (/(producto[s]?|art[ií]culo[s]?|cargador(es)?|mouse|laptop[s]?)/i.test(normalizedInput)) {
+    const categoryMatch = hdcompanyProducts.find((p) => normalizedInput.includes(normalizeText(p.categoria)));
     if (categoryMatch) {
       const productsInCategory = hdcompanyProducts
         .filter((p) => p.categoria === categoryMatch.categoria)
-        .map((p) => `• ${p.nombre} - ${p.precio}`)
-        .join('\n');
+        .slice(0, 5)
+        .map((p) => {
+          const imageUrl = p.image_url?.startsWith('/')
+            ? `https://hdcompany-whatsapp.onrender.com${p.image_url}`
+            : p.image_url || '/default-product.jpg';
+          return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+        })
+        .join('<br/>');
       return res.json({
-        message: `Productos en ${categoryMatch.categoria}:\n${productsInCategory}\n¿En qué te puedo ayudar ahora, ${userName}? 😄`,
+        message: `Productos en ${categoryMatch.categoria}:<br/>${productsInCategory}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
         intent: 'CategoryProducts',
       });
     }
@@ -147,26 +204,25 @@ app.post('/api/hdcompany/openai', async (req, res) => {
   // Llamar a OpenAI para otras preguntas
   try {
     const prompt = `
-      Eres un asistente de HD Company, una tienda de laptops y tecnología en Lima, Perú.
+      Eres un asistente de HD Company, una tienda de tecnología en Lima, Perú.
       Usa la siguiente información para responder:
-      - Preguntas frecuentes: ${JSON.stringify(faqs, null, 2)}.
-      - Productos disponibles: ${JSON.stringify(hdcompanyProducts, null, 2)}.
-      - Categorías: ${JSON.stringify([...new Set(hdcompanyProducts.map((p) => p.categoria))], null, 2)}.
-      - Reglas de descuentos: ${JSON.stringify(discounts, null, 2)}.
-      Responde en español, de manera amigable, profesional y concisa a la pregunta: "${input}".
-      - Si la pregunta es sobre ubicación, métodos de pago, envíos o contacto, usa las FAQs.
-      - Si es sobre categorías, productos o precios, usa los datos de productos y categorías.
-      - Si es sobre descuentos, usa las reglas de descuentos.
-      - No inventes información. Si no sabes la respuesta, di: "Lo siento, ${userName}, no tengo suficiente información. 😅 ¿Quieres preguntar otra cosa o volver al menú?"
-    
+      - Preguntas frecuentes: ${JSON.stringify(faqs)}.
+      - Productos: ${JSON.stringify(hdcompanyProducts)}.
+      - Categorías: ${JSON.stringify([...new Set(hdcompanyProducts.map((p) => p.categoria))])}.
+      - Descuentos: ${JSON.stringify(discounts)}.
+      Responde en español, amigable, profesional y en máximo 300 caracteres a: "${input}".
+      - Si pide una recomendación (ej. "qué laptop me recomiendas"), sugiere un producto de la categoría adecuada (ej. "Laptop LENOVO IDEAPAD 5 ARE05 – RYZEN 7 4700U, 8GB, SSD 500GB, 14″ FHD, WINDOWS 10").
+      - Usa el nombre exacto del producto según el JSON.
+      - No inventes información. Si no sabes, di: "Lo siento, ${userName}, no tengo esa info. 😅 ¿Otra cosa?"
+      - Termina con: "¿En qué te ayudo ahora, ${userName}? 😄"
     `;
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500,
+      max_tokens: 100,
     });
-    const response = completion.choices[0].message.content || `Lo siento, ${userName}, no entendí. 😅 ¿Más detalles o elige una opción?`;
-    return res.json({ message: response, intent: 'OpenAI' });
+    const message = completion.choices[0].message.content;
+    return res.json({ message, intent: 'General' });
   } catch (error) {
     console.error('Error con OpenAI:', error);
     return res.json({
