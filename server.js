@@ -35,6 +35,10 @@ const normalizeText = (text) =>
     .toLowerCase()
     .trim();
 
+// Función para buscar producto por nombre
+const findProductByName = (name) =>
+  hdcompanyProducts.find((p) => normalizeText(p.nombre).includes(normalizeText(name)));
+
 // Endpoint para productos de Shopify (para romani)
 app.get('/api/shopify/products', async (req, res) => {
   try {
@@ -70,7 +74,7 @@ app.get('/api/hdcompany/faqs', (req, res) => {
 
 // Endpoint para detectIntent con OpenAI
 app.post('/api/hdcompany/openai', async (req, res) => {
-  const { input, userName } = req.body;
+  const { input, userName, lastProduct } = req.body;
   const normalizedInput = normalizeText(input);
 
   // Verificar FAQs
@@ -92,23 +96,30 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     return res.json({
       message: `${faqMatch.answer}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'FAQ',
+      lastProduct,
     });
   }
 
   // Verificar solicitud de imagen
   if (/\b(imagen|foto|ver.*producto|c[oó]mo.*es|puedo.*ver)\b/i.test(normalizedInput)) {
-    const productMatch = hdcompanyProducts.find((p) =>
-      normalizedInput.includes(normalizeText(p.nombre))
-    );
+    const productMatch = lastProduct
+      ? findProductByName(lastProduct)
+      : hdcompanyProducts.find((p) => normalizedInput.includes(normalizeText(p.nombre)));
     if (productMatch) {
       const imageUrl = productMatch.image_url?.startsWith('/')
         ? `https://server-kbd8.onrender.com${productMatch.image_url}`
         : productMatch.image_url || '/default-product.jpg';
       return res.json({
-        message: `📷 Imagen de ${productMatch.nombre}:<br/><img src="${imageUrl}" alt="${productMatch.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
+        message: `📷 Imagen de ${productMatch.nombre}:<br/><img src="${imageUrl}" alt="${productMatch.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
         intent: 'Imagen',
+        lastProduct: productMatch.nombre,
       });
     }
+    return res.json({
+      message: `Lo siento, ${userName}, no sé de qué producto hablas. 😅 ¿Puedes decirme el nombre del producto o elegir una opción?`,
+      intent: 'ImagenNoEncontrada',
+      lastProduct,
+    });
   }
 
   // Verificar despedida
@@ -116,6 +127,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     return res.json({
       message: `¡Gracias por contactarnos, ${userName}! 😊 Escríbenos si necesitas más ayuda.`,
       intent: 'Despedida',
+      lastProduct: null,
     });
   }
 
@@ -126,6 +138,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     return res.json({
       message: `Tenemos las siguientes categorías: ${categoryList}. ¿Quieres ver productos de alguna categoría específica, ${userName}? 😄`,
       intent: 'Categories',
+      lastProduct,
     });
   }
 
@@ -140,12 +153,13 @@ app.post('/api/hdcompany/openai', async (req, res) => {
         const imageUrl = p.image_url?.startsWith('/')
           ? `https://server-kbd8.onrender.com${p.image_url}`
           : p.image_url || '/default-product.jpg';
-        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
       })
       .join('<br/>');
     return res.json({
       message: `Los productos más caros son:<br/>${productList}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'ExpensiveProducts',
+      lastProduct,
     });
   }
 
@@ -160,12 +174,13 @@ app.post('/api/hdcompany/openai', async (req, res) => {
         const imageUrl = p.image_url?.startsWith('/')
           ? `https://server-kbd8.onrender.com${p.image_url}`
           : p.image_url || '/default-product.jpg';
-        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
       })
       .join('<br/>');
     return res.json({
       message: `Los productos más baratos son:<br/>${productList}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'CheapProducts',
+      lastProduct,
     });
   }
 
@@ -177,6 +192,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     return res.json({
       message: `Nuestros descuentos: ${discountText} ¿En qué te ayudo ahora, ${userName}? 😄`,
       intent: 'Discount',
+      lastProduct,
     });
   }
 
@@ -191,12 +207,13 @@ app.post('/api/hdcompany/openai', async (req, res) => {
           const imageUrl = p.image_url?.startsWith('/')
             ? `https://server-kbd8.onrender.com${p.image_url}`
             : p.image_url || '/default-product.jpg';
-          return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" class="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
+          return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
         })
         .join('<br/>');
       return res.json({
         message: `Productos en ${categoryMatch.categoria}:<br/>${productsInCategory}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
         intent: 'CategoryProducts',
+        lastProduct,
       });
     }
   }
@@ -213,6 +230,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
       Responde en español, amigable, profesional y en máximo 300 caracteres a: "${input}".
       - Si pide una recomendación (ej. "qué laptop me recomiendas"), sugiere un producto de la categoría adecuada (ej. "Laptop LENOVO IDEAPAD 5 ARE05 – RYZEN 7 4700U, 8GB, SSD 500GB, 14″ FHD, WINDOWS 10").
       - Usa el nombre exacto del producto según el JSON.
+      - Si recomiendas un producto, incluye su nombre exacto al final entre corchetes, ej. [Laptop LENOVO IDEAPAD 5 ARE05 – RYZEN 7 4700U, 8GB, SSD 500GB, 14″ FHD, WINDOWS 10].
       - No inventes información. Si no sabes, di: "Lo siento, ${userName}, no tengo esa info. 😅 ¿Otra cosa?"
       - Termina con: "¿En qué te ayudo ahora, ${userName}? 😄"
     `;
@@ -222,12 +240,18 @@ app.post('/api/hdcompany/openai', async (req, res) => {
       max_tokens: 100,
     });
     const message = completion.choices[0].message.content;
-    return res.json({ message, intent: 'General' });
+    const productMatch = message.match(/\[(.+?)\]/); // Extraer nombre del producto
+    return res.json({
+      message: productMatch ? message.replace(/\[(.+?)\]/, '') : message,
+      intent: 'General',
+      lastProduct: productMatch ? productMatch[1] : lastProduct,
+    });
   } catch (error) {
     console.error('Error con OpenAI:', error);
     return res.json({
       message: `Lo siento, ${userName}, no entendí. 😅 ¿Más detalles o elige una opción?`,
       intent: 'Desconocido',
+      lastProduct,
     });
   }
 });
