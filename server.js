@@ -105,20 +105,17 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     const productMatch = lastProduct
       ? findProductByName(lastProduct)
       : hdcompanyProducts.find((p) => normalizedInput.includes(normalizeText(p.nombre)));
-    if (productMatch) {
-      const imageUrl = productMatch.image_url?.startsWith('/')
+    const imageUrl = productMatch
+      ? productMatch.image_url?.startsWith('/')
         ? `https://server-kbd8.onrender.com${productMatch.image_url}`
-        : productMatch.image_url || '/default-product.jpg';
-      return res.json({
-        message: `📷 Imagen de ${productMatch.nombre}:<br/><img src="${imageUrl}" alt="${productMatch.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
-        intent: 'Imagen',
-        lastProduct: productMatch.nombre,
-      });
-    }
+        : productMatch.image_url || 'https://server-kbd8.onrender.com/default-product.jpg'
+      : 'https://server-kbd8.onrender.com/default-product.jpg';
+    const productName = productMatch ? productMatch.nombre : lastProduct || 'Producto no especificado';
+    console.log('Image request:', { lastProduct, productName, imageUrl }); // Depuración
     return res.json({
-      message: `Lo siento, ${userName}, no sé de qué producto hablas. 😅 ¿Puedes decirme el nombre del producto o elegir una opción?`,
-      intent: 'ImagenNoEncontrada',
-      lastProduct,
+      message: `📷 Imagen de ${productName}:<br/><img src="${imageUrl}" alt="${productName}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
+      intent: 'Imagen',
+      lastProduct: productName,
     });
   }
 
@@ -165,25 +162,30 @@ app.post('/api/hdcompany/openai', async (req, res) => {
 
   // Pregunta sobre productos más baratos
   if (/(m[aá]s barato[s]?|econ[oó]mico[s]?|menor precio)/i.test(normalizedInput)) {
-    const sortedProducts = [...hdcompanyProducts].sort(
+    const isLaptopQuery = /laptop/i.test(normalizedInput);
+    const filteredProducts = isLaptopQuery
+      ? hdcompanyProducts.filter((p) => p.categoria.toLowerCase().includes('laptop'))
+      : hdcompanyProducts;
+    if (filteredProducts.length === 0) {
+      return res.json({
+        message: `Lo siento, ${userName}, no tenemos laptops disponibles. 😅 ¿Otra cosa?`,
+        intent: 'NoProducts',
+        lastProduct: null,
+      });
+    }
+    const sortedProducts = [...filteredProducts].sort(
       (a, b) => parseFloat(a.precio.replace('PEN ', '')) - parseFloat(b.precio.replace('PEN ', ''))
     );
-    const topCheap = sortedProducts.slice(0, 3);
-    const productList = topCheap
-      .map((p) => {
-        const imageUrl = p.image_url?.startsWith('/')
-          ? `https://server-kbd8.onrender.com${p.image_url}`
-          : p.image_url || '/default-product.jpg';
-        return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
-      })
-      .join('<br/>');
+    const cheapestProduct = sortedProducts[0];
+    const imageUrl = cheapestProduct.image_url?.startsWith('/')
+      ? `https://server-kbd8.onrender.com${cheapestProduct.image_url}`
+      : cheapestProduct.image_url || '/default-product.jpg';
     return res.json({
-      message: `Los productos más baratos son:<br/>${productList}<br/>¿En qué te ayudo ahora, ${userName}? 😄`,
-      intent: 'CheapProducts',
-      lastProduct,
+      message: `La ${isLaptopQuery ? 'laptop' : 'producto'} más económica es "${cheapestProduct.nombre}" por ${cheapestProduct.precio}.<br/><img src="${imageUrl}" alt="${cheapestProduct.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
+      intent: 'CheapestProduct',
+      lastProduct: cheapestProduct.nombre,
     });
   }
-
   // Pregunta sobre descuentos
   if (/(descuento[s]?|oferta[s]?|promoci[oó]n)/i.test(normalizedInput)) {
     const discountText = discounts.bulk_discounts
@@ -227,31 +229,46 @@ app.post('/api/hdcompany/openai', async (req, res) => {
       - Productos: ${JSON.stringify(hdcompanyProducts)}.
       - Categorías: ${JSON.stringify([...new Set(hdcompanyProducts.map((p) => p.categoria))])}.
       - Descuentos: ${JSON.stringify(discounts)}.
+      - Último producto recomendado: ${lastProduct || 'ninguno'}.
       Responde en español, amigable, profesional y en máximo 300 caracteres a: "${input}".
-      - Si pide una recomendación (ej. "qué laptop me recomiendas"), sugiere un producto de la categoría adecuada (ej. "Laptop LENOVO IDEAPAD 5 ARE05 – RYZEN 7 4700U, 8GB, SSD 500GB, 14″ FHD, WINDOWS 10").
-      - Usa el nombre exacto del producto según el JSON.
-      - Si recomiendas un producto, incluye su nombre exacto al final entre corchetes, ej. [Laptop LENOVO IDEAPAD 5 ARE05 – RYZEN 7 4700U, 8GB, SSD 500GB, 14″ FHD, WINDOWS 10].
-      - No inventes información. Si no sabes, di: "Lo siento, ${userName}, no tengo esa info. 😅 ¿Otra cosa?"
+      - Si pide una recomendación (ej. "qué laptop me recomiendas"), sugiere un producto de la categoría adecuada usando su nombre exacto según el JSON (ej. "CPU AMD RYZEN") e incluye su precio.
+      - Incluye el nombre exacto del producto al final entre corchetes, ej. [CPU AMD RYZEN].
+      - Asegúrate de incluir el nombre y precio del producto en la respuesta antes de los corchetes, ej. "Te recomiendo el CPU AMD RYZEN por PEN 3200.00 [CPU AMD RYZEN]".
+      - Si pregunta por el precio (ej. "cuánto está"), usa el último producto recomendado (${lastProduct || 'ninguno'}) y devuelve su precio exacto desde el JSON.
+      - No inventes productos. Si no sabes o no hay contexto, di: "Lo siento, ${userName}, no tengo esa info. 😅 ¿Otra cosa?"
       - Termina con: "¿En qué te ayudo ahora, ${userName}? 😄"
     `;
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 100,
+      max_tokens: 150,
     });
-    const message = completion.choices[0].message.content;
+    let message = completion.choices[0].message.content;
     const productMatch = message.match(/\[(.+?)\]/); // Extraer nombre del producto
+    const newLastProduct = productMatch ? productMatch[1] : lastProduct;
+    // Asegurar que el nombre del producto esté en el mensaje
+    if (productMatch && !message.includes(productMatch[1])) {
+      message = message.replace(/\[(.+?)\]/, `${productMatch[1]} [$1]`);
+    }
+    // Manejar preguntas de precio
+    if (/(cu[aá]nto.*(est[aá]|vale|precio)|precio.*cu[aá]nto)/i.test(normalizeText(input)) && lastProduct) {
+      const product = hdcompanyProducts.find((p) => normalizeText(p.nombre).includes(normalizeText(lastProduct)));
+      if (product) {
+        message = `El precio de "${product.nombre}" es ${product.precio}. ¿En qué te ayudo ahora, ${userName}? 😄`;
+      }
+    }
+    console.log('OpenAI response:', { message, newLastProduct }); // Depuración
     return res.json({
       message: productMatch ? message.replace(/\[(.+?)\]/, '') : message,
       intent: 'General',
-      lastProduct: productMatch ? productMatch[1] : lastProduct,
+      lastProduct: newLastProduct,
     });
   } catch (error) {
     console.error('Error con OpenAI:', error);
     return res.json({
       message: `Lo siento, ${userName}, no entendí. 😅 ¿Más detalles o elige una opción?`,
       intent: 'Desconocido',
-      lastProduct,
+      lastProduct: null,
     });
   }
 });

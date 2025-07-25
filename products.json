@@ -4,21 +4,24 @@
     "nombre": "Cargador HP 19.5V 3.5A | Punta Aguja",
     "precio": "PEN 45.00",
     "descripcion": "Cargador compatible con laptops HP.",
-    "categoria": "Laptops y Accesorios"
+    "categoria": "Laptops y Accesorios",
+    "image_url": "/images/lya1.jpg"
   },
   {
     "id": 2,
     "nombre": "Cargador HP 18.5V 3.5A | Punta Amarilla",
     "precio": "PEN 45.00",
     "descripcion": "Cargador para modelos HP con punta amarilla.",
-    "categoria": "Laptops y Accesorios"
+    "categoria": "Laptops y Accesorios",
+    "image_url": "/images/lya2.jpg"
   },
   {
     "id": 3,
     "nombre": "Cargador LENOVO 20V 3.25A 65W | Punta USB",
     "precio": "PEN 45.00",
     "descripcion": "Cargador Lenovo con conexión USB.",
-    "categoria": "Laptops y Accesorios"
+    "categoria": "Laptops y Accesorios",
+    "image_url": "/images/lya3.jpg"
   },
   {
     "id": 4,
@@ -985,21 +988,25 @@
     "nombre": "Mouse Gamer + Mouse Pad Cybertel Scorpion CYB TG5003",
     "precio": "PEN 40.00",
     "descripcion": "Combo de mouse gamer y mouse pad Cybertel Scorpion.",
-    "categoria": "OFERTAS"
+    "categoria": "OFERTAS",
+    "image_url":"/images/of1.jpg"
   },
   {
     "id": 141,
     "nombre": "CPU AMD RYZEN",
     "precio": "PEN 3200.00",
     "descripcion": "Procesador AMD Ryzen.",
-    "categoria": "OFERTAS"
+    "categoria": "OFERTAS",
+    "image_url":"/images/of2.png"
   },
   {
     "id": 142,
     "nombre": "Mousepad con Muñequera / Diseño",
     "precio": "PEN 15.00",
     "descripcion": "Mousepad con muñequera y diseño.",
-    "categoria": "OFERTAS"
+    "categoria": "OFERTAS",
+    "image_url":"/images/of3.jpg"
+
   },
   {
     "id": 143,
