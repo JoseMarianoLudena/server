@@ -108,9 +108,9 @@ app.post('/api/hdcompany/openai', async (req, res) => {
       : hdcompanyProducts.find((p) => normalizedInput.includes(normalizeText(p.nombre)));
     const imageUrl = productMatch
       ? productMatch.image_url?.startsWith('/')
-        ? `http://localhost:3001${productMatch.image_url}`
-        : productMatch.image_url || 'http://localhost:3001/default-product.jpg'
-      : 'http://localhost:3001/default-product.jpg';
+        ? `https://server-kbd8.onrender.com${productMatch.image_url}`
+        : productMatch.image_url || 'https://server-kbd8.onrender.com/default-product.jpg'
+      : 'https://server-kbd8.onrender.com/default-product.jpg';
     const productName = productMatch ? productMatch.nombre : lastProduct || 'Producto no especificado';
     console.log('Image request:', { lastProduct, productName, imageUrl });
     return res.json({
@@ -169,7 +169,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     const productList = topExpensive
       .map((p) => {
         const imageUrl = p.image_url?.startsWith('/')
-          ? `http://localhost:3001${p.image_url}`
+          ? `https://server-kbd8.onrender.com${p.image_url}`
           : p.image_url || '/default-product.jpg';
         return `<a href="#" onclick="window.dispatchEvent(new CustomEvent('selectProduct', { detail: { id: ${1000 + p.id} } }));"><img src="${imageUrl}" alt="${p.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /></a><br/>${p.nombre} - <span class="font-bold" style="color: #456883;">${p.precio}</span>`;
       })
@@ -199,7 +199,7 @@ app.post('/api/hdcompany/openai', async (req, res) => {
     );
     const cheapestProduct = sortedProducts[0];
     const imageUrl = cheapestProduct.image_url?.startsWith('/')
-      ? `http://localhost:3001${cheapestProduct.image_url}`
+      ? `https://server-kbd8.onrender.com${cheapestProduct.image_url}`
       : cheapestProduct.image_url || '/default-product.jpg';
     return res.json({
       message: `La ${isLaptopQuery ? 'laptop' : 'producto'} más económica es "${cheapestProduct.nombre}" por ${cheapestProduct.precio}.<br/><img src="${imageUrl}" alt="${cheapestProduct.nombre}" className="inline-block border-2 border-[#333] rounded-lg mb-2 max-w-[150px] h-24 object-contain" /><br/>¿En qué te ayudo ahora, ${userName}? 😄`,
