@@ -78,6 +78,29 @@ app.post('/api/hdcompany/openai', async (req, res) => {
   const { input, userName, lastProduct } = req.body;
   const normalizedInput = normalizeText(input);
 
+// Endpoint básico para WendyCamargo (solo por consistencia)
+app.get('/api/wendycamargo/config', (req, res) => {
+  res.json({
+    status: 'active',
+    client: 'wendycamargo',
+    features: {
+      llm_simulation: true,
+      amazon_integration: true,
+      course_info: true
+    }
+  });
+});
+
+// Endpoint para cualquier consulta específica de Wendy (opcional)
+app.post('/api/wendycamargo/contact', (req, res) => {
+  const { message, email } = req.body;
+  // Aquí podrías agregar lógica para contacto si lo necesitas en el futuro
+  res.json({
+    status: 'received',
+    message: 'Mensaje recibido. Wendy se contactará contigo pronto.'
+  });
+});
+
   // Verificar FAQs
   const faqMatch = faqs.find((faq) => {
     const normalizedQuestion = normalizeText(faq.question);
